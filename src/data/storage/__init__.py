@@ -6,8 +6,14 @@ Data Storage Module
 """
 
 from .base import DataStorage, StorageRegistry
+from .influxdb_storage import InfluxDBStorage
+from .timescaledb_storage import TimescaleDBStorage
+from .postgres_storage import PostgreSQLStorage
 
 __all__ = [
     "DataStorage",
     "StorageRegistry",
+    "InfluxDBStorage",
+    "TimescaleDBStorage",
+    "PostgreSQLStorage",
 ]
