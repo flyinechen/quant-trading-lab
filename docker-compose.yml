@@ -1,0 +1,228 @@
+version: '3.9'
+
+services:
+  # ==================== 数据库服务 ====================
+  
+  # InfluxDB (时序数据 - Tick/K 线)
+  influxdb:
+    image: influxdb:2.7
+    container_name: quant_influxdb
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=quant_lab_password
+      - DOCKER_INFLUXDB_INIT_ORG=quant_lab
+      - DOCKER_INFLUXDB_INIT_BUCKET=market_data
+      - DOCKER_INFLUXDB_INIT_RETENTION=3y
+    networks:
+      - quant_network
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  
+  # TimescaleDB (K 线数据 - 时间序列 PostgreSQL)
+  timescaledb:
+    image: timescale/timescaledb:2.11.0-pg15
+    container_name: quant_timescaledb
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=quant_user
+      - POSTGRES_PASSWORD=quant_password
+      - POSTGRES_DB=market_data
+    networks:
+      - quant_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quant_user"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  
+  # PostgreSQL (交易记录/用户数据)
+  postgres:
+    image: postgres:15
+    container_name: quant_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - POSTGRES_USER=quant_user
+      - POSTGRES_PASSWORD=quant_password
+      - POSTGRES_DB=quant_lab
+    networks:
+      - quant_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quant_user"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  
+  # Redis (缓存/会话管理)
+  redis:
+    image: redis:7-alpine
+    container_name: quant_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - quant_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  
+  # ==================== 消息队列 ====================
+  
+  # Kafka (消息队列)
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: quant_kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    depends_on:
+      - zookeeper
+    networks:
+      - quant_network
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+  
+  # Zookeeper (Kafka 依赖)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: quant_zookeeper
+    restart: unless-stopped
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - quant_network
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+  
+  # ==================== 监控 ====================
+  
+  # Prometheus (监控指标)
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: quant_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    networks:
+      - quant_network
+  
+  # Grafana (可视化)
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: quant_grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=quant_password
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    networks:
+      - quant_network
+  
+  # ==================== 应用服务 ====================
+  
+  # FastAPI (后端 API)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quant_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./configs:/app/configs
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://quant_user:quant_password@postgres:5432/quant_lab
+      - INFLUXDB_URL=http://influxdb:8086
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - influxdb
+      - kafka
+      - redis
+    networks:
+      - quant_network
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+  
+  # Web 前端 (React)
+  web:
+    build:
+      context: ./src/web
+      dockerfile: Dockerfile
+    container_name: quant_web
+    restart: unless-stopped
+    ports:
+      - "3001:80"
+    depends_on:
+      - api
+    networks:
+      - quant_network
+
+# ==================== 网络 ====================
+networks:
+  quant_network:
+    driver: bridge
+
+# ==================== 数据卷 ====================
+volumes:
+  influxdb-data:
+  influxdb-config:
+  timescaledb-data:
+  postgres-data:
+  redis-data:
+  kafka-data:
+  zookeeper-data:
+  prometheus-data:
+  grafana-data:
