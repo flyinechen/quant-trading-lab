@@ -6,10 +6,33 @@ Data Module
 支持股票、期货、加密货币等多资产类别。
 """
 
-from .sources.base import DataSource
-from .storage.base import DataStorage
+from .sources import (
+    DataSource,
+    DataSourceRegistry,
+    TushareSource,
+    AKShareSource,
+)
+from .storage import (
+    DataStorage,
+    StorageRegistry,
+)
+from .processor import (
+    DataCleaner,
+    clean_data,
+)
 
 __all__ = [
+    # 数据源
     "DataSource",
+    "DataSourceRegistry",
+    "TushareSource",
+    "AKShareSource",
+    
+    # 数据存储
     "DataStorage",
+    "StorageRegistry",
+    
+    # 数据处理
+    "DataCleaner",
+    "clean_data",
 ]
