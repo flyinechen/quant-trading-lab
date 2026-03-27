@@ -25,8 +25,8 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/flyinechen/quant-trading-lab",
-    packages=find_packages(where="src"),
-    package_dir={"": "src"},
+    packages=find_packages(include=["src", "src.*"]),
+    package_dir={"": "."},
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Financial and Insurance Industry",

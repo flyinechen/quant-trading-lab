@@ -171,7 +171,7 @@ class DataSourceRegistry:
         if name not in cls._sources:
             raise ValueError(f"Unknown data source: {name}")
         
-        return cls._sources[name](name, **kwargs)
+        return cls._sources[name](**kwargs)
     
     @classmethod
     def list_sources(cls) -> List[str]:

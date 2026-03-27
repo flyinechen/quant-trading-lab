@@ -11,7 +11,12 @@ import os
 import yaml
 from pathlib import Path
 from typing import Any, Dict, Optional
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional dependency fallback
+    def load_dotenv(*args, **kwargs):
+        return False
 
 
 class Config:

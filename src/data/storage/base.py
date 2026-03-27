@@ -222,7 +222,7 @@ class StorageRegistry:
         if name not in cls._storages:
             raise ValueError(f"Unknown storage: {name}")
         
-        return cls._storages[name](name, **kwargs)
+        return cls._storages[name](**kwargs)
     
     @classmethod
     def list_storages(cls) -> List[str]:

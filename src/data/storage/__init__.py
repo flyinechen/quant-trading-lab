@@ -6,9 +6,21 @@ Data Storage Module
 """
 
 from .base import DataStorage, StorageRegistry
-from .influxdb_storage import InfluxDBStorage
-from .timescaledb_storage import TimescaleDBStorage
-from .postgres_storage import PostgreSQLStorage
+
+try:
+    from .influxdb_storage import InfluxDBStorage
+except Exception:  # pragma: no cover - optional dependency
+    InfluxDBStorage = None
+
+try:
+    from .timescaledb_storage import TimescaleDBStorage
+except Exception:  # pragma: no cover - optional dependency
+    TimescaleDBStorage = None
+
+try:
+    from .postgres_storage import PostgreSQLStorage
+except Exception:  # pragma: no cover - optional dependency
+    PostgreSQLStorage = None
 
 __all__ = [
     "DataStorage",
